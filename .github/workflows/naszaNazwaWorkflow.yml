@@ -1,0 +1,43 @@
+name: Build Windows Executable 
+
+on:
+  push:
+    branches:
+      - main    
+  schedule:
+    - cron: '0 0 * * 0' 
+  workflow_dispatch: {} 
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest 
+
+    steps:
+    - name: Checkout repository 
+      uses: actions/checkout@v4
+
+    - name: Set up Python 
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9' 
+
+    - name: Install dependencies 
+      run: |
+        pip install --upgrade pip
+        pip install pyinstaller # Upewnij się, że PyInstaller jest zainstalowany
+        # Pozostałe zależności, np. PyQt6, PyYAML
+        # Tutaj uruchomienie skryptu installResources.ps1
+        .\installResources.ps1
+      shell: powershell 
+
+    - name: Build executable with PyInstaller 
+      run: |
+        pyinstaller --onefile --noconsole project.py # Używamy opcji --onefile i --noconsole dla GUI
+      
+      shell: powershell 
+
+    - name: Upload artifact 
+      uses: actions/upload-artifact@v3
+      with:
+        name: DataConverter-Windows-Executable
+        path: dist/project.exe 
