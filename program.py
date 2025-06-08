@@ -164,6 +164,32 @@ def write_data_to_xml(data, output_path):
         print(f"Wystąpił błąd podczas zapisu do pliku XML '{output_path}': {e}")
         return False
 
+def convert_xml_to_dict(element):
+    
+    result = {}
+
+    if element.attrib:
+        result.update(element.attrib)
+
+    for child in element:
+        child_data = convert_xml_to_dict(child)
+        if child.tag in result:
+            if not isinstance(result[child.tag], list):
+                result[child.tag] = [result[child.tag]]
+            result[child.tag].append(child_data)
+        else:
+            result[child.tag] = child_data
+
+    
+    if element.text and element.text.strip():
+        text_content = element.text.strip()
+        if not result and not element.attrib: 
+            return text_content
+        elif text_content: 
+            result['#text'] = text_content
+
+    return result
+
 
 if __name__ == "__main__":
     try:
@@ -181,43 +207,42 @@ if __name__ == "__main__":
         if input_data is not None:
             print("Walidacja pliku wejściowego zakończona sukcesem.")
 
-            data_to_write = input_data 
+            data_for_conversion = None
+
+            if parsed_args['input_format'] == 'xml':
+                if isinstance(input_data, ET.Element):
+                    print("  Konwersja XML (ElementTree) na słownik/listę Pythona...")
+                    data_for_conversion = convert_xml_to_dict(input_data)
+                    print(f"  Przykładowa część skonwertowanych danych: {str(data_for_conversion)[:100]}...")
+                else:
+                    print(f"Błąd: Oczekiwano obiektu ElementTree dla formatu XML, otrzymano {type(input_data)}.")
+                    exit(1)
+            elif parsed_args['input_format'] in ['json', 'yaml']:
+                data_for_conversion = input_data
+                print(f"  Dane wejściowe są już w formie słownika/listy Pythona (z {parsed_args['input_format'].upper()}).")
+
+            if data_for_conversion is None:
+                print("Błąd: Nie udało się przygotować danych do konwersji.")
+                exit(1)
 
             if parsed_args['output_format'] == 'json':
                 print("\nRozpoczynanie zapisu danych do pliku JSON...")
-                if isinstance(data_to_write, ET.Element):
-                    print("  Konwersja XML (ElementTree) do JSON przed zapisem...")
-                    
-                    print("  Pomięto konwersję XML do JSON w tym etapie. Nie można zapisać.")
-                    exit(1) 
-                elif isinstance(data_to_write, (dict, list)):
-                    write_success = write_data_to_json(data_to_write, parsed_args['output_path'])
-                    if not write_success:
-                        print("Program zakończył działanie z błędami podczas zapisu.")
-                        exit(1)
+                write_success = write_data_to_json(data_for_conversion, parsed_args['output_path'])
+                if not write_success:
+                    print("Program zakończył działanie z błędami podczas zapisu.")
+                    exit(1)
             elif parsed_args['output_format'] == 'xml':
                 print("\nRozpoczynanie zapisu danych do pliku XML...")
-                
-                if isinstance(data_to_write, (dict, list)):
-                    print("  Konwersja słownika/listy do XML ElementTree przed zapisem...")
-                    write_success = write_data_to_xml(data_to_write, parsed_args['output_path'])
-                    if not write_success:
-                        print("Program zakończył działanie z błędami podczas zapisu.")
-                        exit(1)
-                elif isinstance(data_to_write, ET.Element):
-                    print("  Zapis obiektu ElementTree bezpośrednio do XML.")
-                    write_success = write_data_to_xml(data_to_write, parsed_args['output_path'])
-                    if not write_success:
-                        print("Program zakończył działanie z błędami podczas zapisu.")
-                        exit(1)
-                else:
-                    print(f"Ostrzeżenie: Nieobsługiwany typ danych dla zapisu do XML: {type(data_to_write)}. Pomięto zapis.")
-                    exit(1) 
+                write_success = write_data_to_xml(data_for_conversion, parsed_args['output_path'])
+                if not write_success:
+                    print("Program zakończył działanie z błędami podczas zapisu.")
+                    exit(1)
+            elif parsed_args['output_format'] == 'yaml':
+                print("\nRozpoczynanie zapisu danych do pliku YAML (implementacja w Tasku 6)...")
+                print("  Zapis do YAML nie jest jeszcze zaimplementowany. Pomięto.")
+                exit(1) 
 
-            else:
-                print(f"Ostrzeżenie: Zapis do formatu '{parsed_args['output_format']}' nie jest jeszcze zaimplementowany.")
-
-            print("Program zakończył działanie pomyślnie.") 
+            print("Program zakończył działanie pomyślnie.")
         else:
             print("Błąd walidacji pliku wejściowego. Program zostanie zakończony.")
             exit(1)
