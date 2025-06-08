@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QComboBox, QFileDialog, QMessageBox, QTextEdit
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -227,6 +227,75 @@ def write_data_to_yaml(data, output_path):
         print(f"Wystąpił nieoczekiwany błąd podczas zapisu do pliku YAML '{output_path}': {e}")
         return False
 
+class ConverterWorker(QThread):
+    finished = pyqtSignal(bool, str) 
+    progress = pyqtSignal(str) 
+
+    def __init__(self, input_path, input_format, output_path, output_format):
+        super().__init__()
+        self.input_path = input_path
+        self.input_format = input_format
+        self.output_path = output_path
+        self.output_format = output_format
+
+    def run(self):
+        try:
+            self.progress.emit("Rozpoczynanie konwersji w tle...")
+
+            input_data = read_and_validate_data(
+                self.input_path,
+                self.input_format
+            )
+
+            if input_data is None:
+                self.finished.emit(False, "Nie udało się wczytać lub zweryfikować pliku wejściowego. Sprawdź logi.")
+                return
+
+            self.progress.emit("Walidacja pliku wejściowego zakończona sukcesem.")
+
+            data_for_conversion = None
+            if self.input_format == 'xml':
+                if isinstance(input_data, ET.Element):
+                    self.progress.emit("  Konwersja XML (ElementTree) na słownik/listę Pythona...")
+                    data_for_conversion = convert_xml_to_dict(input_data)
+                    if data_for_conversion is None:
+                        self.finished.emit(False, "Konwersja XML na wewnętrzny format nie powiodła się.")
+                        return
+                else:
+                    self.finished.emit(False, f"Błąd wewnętrzny: Oczekiwano obiektu ElementTree dla formatu XML, otrzymano {type(input_data)}.")
+                    return
+            elif self.input_format in ['json', 'yaml']:
+                data_for_conversion = input_data
+                self.progress.emit(f"  Dane wejściowe są już w formie słownika/listy Pythona (z {self.input_format.upper()}).")
+            else:
+                self.finished.emit(False, f"Błąd wewnętrzny: Nieznany format wejściowy do konwersji: {self.input_format}.")
+                return
+
+            write_success = False
+            if self.output_format == 'json':
+                self.progress.emit("\nRozpoczynanie zapisu danych do pliku JSON...")
+                write_success = write_data_to_json(data_for_conversion, self.output_path)
+            elif self.output_format == 'xml':
+                self.progress.emit("\nRozpoczynanie zapisu danych do pliku XML...")
+                write_success = write_data_to_xml(data_for_conversion, self.output_path)
+            elif self.output_format == 'yaml':
+                self.progress.emit("\nRozpoczynanie zapisu danych do pliku YAML...")
+                write_success = write_data_to_yaml(data_for_conversion, self.output_path)
+            else:
+                self.finished.emit(False, f"Błąd wewnętrzny: Nieznany format wyjściowy do zapisu: {self.output_format}.")
+                return
+
+            if write_success:
+                self.finished.emit(True, "Konwersja zakończona pomyślnie!")
+            else:
+                self.finished.emit(False, "Wystąpił błąd podczas konwersji. Sprawdź logi.")
+
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            self.progress.emit(f"FATALNY BŁĄD WĄTKU KONWERSJI: {e}\n{error_details}")
+            self.finished.emit(False, f"Wystąpił nieoczekiwany błąd globalny: {e}")
+
 class DataConverterApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -347,63 +416,26 @@ class DataConverterApp(QWidget):
 
         self.log_message(f"  Plik wejściowy: {input_path} (Format: {input_format})")
         self.log_message(f"  Plik wyjściowy: {output_path} (Format: {output_format})")
-        self.log_message("\nRozpoczynanie wczytywania i walidacji pliku wejściowego...")
 
-        input_data = read_and_validate_data(
-            input_path,
-            input_format
-        )
+    
+        self.convert_btn.setEnabled(False)
+        self.convert_btn.setText("Konwertuję...")
 
-        if input_data is None:
-            self.log_message("Błąd: Nie udało się wczytać lub zweryfikować pliku wejściowego. Konwersja przerwana.")
-            QMessageBox.critical(self, "Błąd Konwersji", "Nie udało się wczytać lub zweryfikować pliku wejściowego. Sprawdź logi.")
-            return
+        self.worker = ConverterWorker(input_path, input_format, output_path, output_format)
+        self.worker.finished.connect(self.on_conversion_finished)
+        self.worker.progress.connect(self.log_message) 
+        self.worker.start() 
 
-        self.log_message("Walidacja pliku wejściowego zakończona sukcesem.")
+    def on_conversion_finished(self, success, message):
+        self.convert_btn.setEnabled(True) 
+        self.convert_btn.setText("Konwertuj")
 
-        data_for_conversion = None
-        if input_format == 'xml':
-            if isinstance(input_data, ET.Element):
-                self.log_message("  Konwersja XML (ElementTree) na słownik/listę Pythona...")
-                data_for_conversion = convert_xml_to_dict(input_data)
-                if data_for_conversion is None:
-                    self.log_message("Błąd: Konwersja XML na słownik Pythona nie powiodła się.")
-                    QMessageBox.critical(self, "Błąd Konwersji", "Konwersja XML na wewnętrzny format nie powiodła się.")
-                    return
-            else:
-                self.log_message(f"Błąd wewnętrzny: Oczekiwano obiektu ElementTree dla formatu XML, otrzymano {type(input_data)}.")
-                QMessageBox.critical(self, "Błąd Konwersji", "Wewnętrzny błąd w danych XML.")
-                return
-        elif input_format in ['json', 'yaml']:
-            data_for_conversion = input_data
-            self.log_message(f"  Dane wejściowe są już w formie słownika/listy Pythona (z {input_format.upper()}).")
+        self.log_message(message)
+        if success:
+            QMessageBox.information(self, "Sukces", message)
         else:
-            self.log_message(f"Błąd wewnętrzny: Nieznany format wejściowy do konwersji: {input_format}.")
-            QMessageBox.critical(self, "Błąd Konwersji", "Nieznany format wejściowy.")
-            return
-
-        write_success = False
-        if output_format == 'json':
-            self.log_message("\nRozpoczynanie zapisu danych do pliku JSON...")
-            write_success = write_data_to_json(data_for_conversion, output_path)
-        elif output_format == 'xml':
-            self.log_message("\nRozpoczynanie zapisu danych do pliku XML...")
-            write_success = write_data_to_xml(data_for_conversion, output_path)
-        elif output_format == 'yaml':
-            self.log_message("\nRozpoczynanie zapisu danych do pliku YAML...")
-            write_success = write_data_to_yaml(data_for_conversion, output_path)
-        else:
-            self.log_message(f"Błąd wewnętrzny: Nieznany format wyjściowy do zapisu: {output_format}.")
-            QMessageBox.critical(self, "Błąd Konwersji", "Nieznany format wyjściowy.")
-            return
-
-        if write_success:
-            self.log_message("\nKonwersja zakończona pomyślnie!")
-            QMessageBox.information(self, "Sukces", "Konwersja zakończona pomyślnie!")
-        else:
-            self.log_message("\nBłąd: Konwersja zakończyła się niepowodzeniem.")
-            QMessageBox.critical(self, "Błąd Konwersji", "Wystąpił błąd podczas konwersji. Sprawdź logi.")
-
+            QMessageBox.critical(self, "Błąd Konwersji", message)
+      
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         try:
