@@ -4,10 +4,17 @@ import json
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 import yaml
+import sys 
+
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QComboBox, QFileDialog, QMessageBox, QTextEdit
+)
+from PyQt6.QtCore import Qt
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Konwertuje dane z jednego formatu na inny (XML, JSON, YAML)."
+        description="Konwertuje dane z jednego formatu na inny (XML, JSON, YAML).",
     )
 
     parser.add_argument(
@@ -22,7 +29,7 @@ def parse_arguments():
         help="Ścieżka do pliku wyjściowego (np. output.json, result.yaml)."
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args() 
 
     input_path = args.input_file
     output_path = args.output_file
@@ -155,8 +162,8 @@ def write_data_to_xml(data, output_path):
                 for item in data:
                     item_elem = convert_dict_to_xml_element("item", item)
                     root.append(item_elem)
-        else:
-            raise TypeError(f"Błąd wewnętrzny: Nieobsługiwany typ danych do zapisu do XML: {type(data)}")
+            else:
+                raise TypeError(f"Błąd wewnętrzny: Nieobsługiwany typ danych do zapisu do XML: {type(data)}")
 
         rough_string = ET.tostring(root, 'utf-8')
         reparsed = minidom.parseString(rough_string)
@@ -172,7 +179,7 @@ def write_data_to_xml(data, output_path):
     except IOError as e:
         print(f"Błąd zapisu do XML: Problem z dostępem do pliku '{output_path}': {e}")
         return False
-    except ET.ParseError as e: 
+    except ET.ParseError as e:
         print(f"Błąd XML parsowania podczas zapisu: {e}")
         return False
     except Exception as e:
@@ -204,6 +211,7 @@ def convert_xml_to_dict(element):
     return result
 
 def write_data_to_yaml(data, output_path):
+    
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
@@ -219,72 +227,253 @@ def write_data_to_yaml(data, output_path):
         print(f"Wystąpił nieoczekiwany błąd podczas zapisu do pliku YAML '{output_path}': {e}")
         return False
 
-if __name__ == "__main__":
-    try:
-        parsed_args = parse_arguments() 
-        print(f"Pomyślnie sparsowano argumenty:")
-        print(f"  Plik wejściowy: {parsed_args['input_path']} (Format: {parsed_args['input_format']})")
-        print(f"  Plik wyjściowy: {parsed_args['output_path']} (Format: {parsed_args['output_format']})")
+class DataConverterApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
 
-        print("\nRozpoczynanie wczytywania i walidacji pliku wejściowego...")
+    def init_ui(self):
+        self.setWindowTitle('Konwerter Danych (XML, JSON, YAML)')
+        self.setGeometry(100, 100, 700, 450)
+
+        main_layout = QVBoxLayout()
+
+        input_layout = QHBoxLayout()
+        self.input_label = QLabel('Plik wejściowy:')
+        self.input_path_edit = QLineEdit()
+        self.input_path_edit.setPlaceholderText("Wybierz plik wejściowy...")
+        self.input_browse_btn = QPushButton('Przeglądaj...')
+        self.input_browse_btn.clicked.connect(self.browse_input_file)
+        self.input_format_label = QLabel('Format wejściowy:')
+        self.input_format_combo = QComboBox()
+        self.input_format_combo.addItems(['json', 'xml', 'yaml'])
+
+        input_layout.addWidget(self.input_label)
+        input_layout.addWidget(self.input_path_edit)
+        input_layout.addWidget(self.input_browse_btn)
+        input_layout.addWidget(self.input_format_label)
+        input_layout.addWidget(self.input_format_combo)
+        main_layout.addLayout(input_layout)
+
+        output_layout = QHBoxLayout()
+        self.output_label = QLabel('Plik wyjściowy:')
+        self.output_path_edit = QLineEdit()
+        self.output_path_edit.setPlaceholderText("Wybierz lub wprowadź nazwę pliku wyjściowego...")
+        self.output_browse_btn = QPushButton('Przeglądaj...')
+        self.output_browse_btn.clicked.connect(self.browse_output_file)
+        self.output_format_label = QLabel('Format wyjściowy:')
+        self.output_format_combo = QComboBox()
+        self.output_format_combo.addItems(['json', 'xml', 'yaml'])
+
+        output_layout.addWidget(self.output_label)
+        output_layout.addWidget(self.output_path_edit)
+        output_layout.addWidget(self.output_browse_btn)
+        output_layout.addWidget(self.output_format_label)
+        output_layout.addWidget(self.output_format_combo)
+        main_layout.addLayout(output_layout)
+
+        self.convert_btn = QPushButton('Konwertuj')
+        self.convert_btn.setFixedHeight(40)
+        self.convert_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        self.convert_btn.clicked.connect(self.perform_conversion)
+        main_layout.addWidget(self.convert_btn)
+
+        self.log_output = QTextEdit()
+        self.log_output.setReadOnly(True)
+        self.log_output.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+        main_layout.addWidget(QLabel("Logi operacji:"))
+        main_layout.addWidget(self.log_output)
+
+        self.setLayout(main_layout)
+
+        self.input_path_edit.textChanged.connect(self.update_input_format)
+
+        self.output_path_edit.textChanged.connect(self.update_output_format)
+
+    def update_input_format(self):
+        file_path = self.input_path_edit.text()
+        _, ext = os.path.splitext(file_path)
+        ext = ext[1:].lower()
+        if ext == 'yml':
+            ext = 'yaml'
+
+        index = self.input_format_combo.findText(ext)
+        if index >= 0:
+            self.input_format_combo.setCurrentIndex(index)
+
+    def update_output_format(self):
+        file_path = self.output_path_edit.text()
+        _, ext = os.path.splitext(file_path)
+        ext = ext[1:].lower()
+        if ext == 'yml':
+            ext = 'yaml'
+
+        index = self.output_format_combo.findText(ext)
+        if index >= 0:
+            self.output_format_combo.setCurrentIndex(index)
+
+    def browse_input_file(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Wybierz plik wejściowy", "", "Wszystkie pliki (*);;JSON pliki (*.json);;XML pliki (*.xml);;YAML pliki (*.yaml *.yml)")
+        if file_name:
+            self.input_path_edit.setText(file_name)
+
+    def browse_output_file(self):
+        file_name, _ = QFileDialog.getSaveFileName(self, "Zapisz plik wyjściowy jako", "", "Wszystkie pliki (*);;JSON pliki (*.json);;XML pliki (*.xml);;YAML pliki (*.yaml *.yml)")
+        if file_name:
+            self.output_path_edit.setText(file_name)
+
+    def log_message(self, message):
+        self.log_output.append(message)
+        QApplication.processEvents() 
+
+    def perform_conversion(self):
+        self.log_output.clear()
+        self.log_message("Rozpoczynanie konwersji...")
+
+        input_path = self.input_path_edit.text()
+        output_path = self.output_path_edit.text()
+        input_format = self.input_format_combo.currentText()
+        output_format = self.output_format_combo.currentText()
+
+        if not input_path or not output_path:
+            QMessageBox.warning(self, "Błąd", "Proszę podać ścieżki do obu plików (wejściowego i wyjściowego).")
+            self.log_message("Błąd: Nie podano wszystkich ścieżek.")
+            return
+
+        if not os.path.exists(input_path):
+            QMessageBox.warning(self, "Błąd", f"Plik wejściowy '{input_path}' nie istnieje.")
+            self.log_message(f"Błąd: Plik wejściowy '{input_path}' nie istnieje.")
+            return
+
+        self.log_message(f"  Plik wejściowy: {input_path} (Format: {input_format})")
+        self.log_message(f"  Plik wyjściowy: {output_path} (Format: {output_format})")
+        self.log_message("\nRozpoczynanie wczytywania i walidacji pliku wejściowego...")
+
         input_data = read_and_validate_data(
-            parsed_args['input_path'],
-            parsed_args['input_format']
+            input_path,
+            input_format
         )
 
         if input_data is None:
-            print("Błąd: Nie udało się wczytać lub zweryfikować pliku wejściowego. Program zostanie zakończony.")
-            exit(1) 
+            self.log_message("Błąd: Nie udało się wczytać lub zweryfikować pliku wejściowego. Konwersja przerwana.")
+            QMessageBox.critical(self, "Błąd Konwersji", "Nie udało się wczytać lub zweryfikować pliku wejściowego. Sprawdź logi.")
+            return
+
+        self.log_message("Walidacja pliku wejściowego zakończona sukcesem.")
 
         data_for_conversion = None
-
-        if parsed_args['input_format'] == 'xml':
+        if input_format == 'xml':
             if isinstance(input_data, ET.Element):
-                print("  Konwersja XML (ElementTree) na słownik/listę Pythona...")
+                self.log_message("  Konwersja XML (ElementTree) na słownik/listę Pythona...")
                 data_for_conversion = convert_xml_to_dict(input_data)
-                if data_for_conversion is None: 
-                    print("Błąd: Konwersja XML na słownik Pythona nie powiodła się.")
-                    exit(1)
-                print(f"  Przykładowa część skonwertowanych danych: {str(data_for_conversion)[:100]}...")
+                if data_for_conversion is None:
+                    self.log_message("Błąd: Konwersja XML na słownik Pythona nie powiodła się.")
+                    QMessageBox.critical(self, "Błąd Konwersji", "Konwersja XML na wewnętrzny format nie powiodła się.")
+                    return
             else:
-                print(f"Błąd wewnętrzny: Oczekiwano obiektu ElementTree dla formatu XML, otrzymano {type(input_data)}.")
-                exit(1)
-        elif parsed_args['input_format'] in ['json', 'yaml']:
+                self.log_message(f"Błąd wewnętrzny: Oczekiwano obiektu ElementTree dla formatu XML, otrzymano {type(input_data)}.")
+                QMessageBox.critical(self, "Błąd Konwersji", "Wewnętrzny błąd w danych XML.")
+                return
+        elif input_format in ['json', 'yaml']:
             data_for_conversion = input_data
-            print(f"  Dane wejściowe są już w formie słownika/listy Pythona (z {parsed_args['input_format'].upper()}).")
+            self.log_message(f"  Dane wejściowe są już w formie słownika/listy Pythona (z {input_format.upper()}).")
         else:
-            print(f"Błąd wewnętrzny: Nieznany format wejściowy do konwersji: {parsed_args['input_format']}.")
-            exit(1)
+            self.log_message(f"Błąd wewnętrzny: Nieznany format wejściowy do konwersji: {input_format}.")
+            QMessageBox.critical(self, "Błąd Konwersji", "Nieznany format wejściowy.")
+            return
 
         write_success = False
-        if parsed_args['output_format'] == 'json':
-            print("\nRozpoczynanie zapisu danych do pliku JSON...")
-            write_success = write_data_to_json(data_for_conversion, parsed_args['output_path'])
-        elif parsed_args['output_format'] == 'xml':
-            print("\nRozpoczynanie zapisu danych do pliku XML...")
-            write_success = write_data_to_xml(data_for_conversion, parsed_args['output_path'])
-        elif parsed_args['output_format'] == 'yaml':
-            print("\nRozpoczynanie zapisu danych do pliku YAML...")
-            write_success = write_data_to_yaml(data_for_conversion, parsed_args['output_path'])
+        if output_format == 'json':
+            self.log_message("\nRozpoczynanie zapisu danych do pliku JSON...")
+            write_success = write_data_to_json(data_for_conversion, output_path)
+        elif output_format == 'xml':
+            self.log_message("\nRozpoczynanie zapisu danych do pliku XML...")
+            write_success = write_data_to_xml(data_for_conversion, output_path)
+        elif output_format == 'yaml':
+            self.log_message("\nRozpoczynanie zapisu danych do pliku YAML...")
+            write_success = write_data_to_yaml(data_for_conversion, output_path)
         else:
-            print(f"Błąd wewnętrzny: Nieznany format wyjściowy do zapisu: {parsed_args['output_format']}.")
-            exit(1)
+            self.log_message(f"Błąd wewnętrzny: Nieznany format wyjściowy do zapisu: {output_format}.")
+            QMessageBox.critical(self, "Błąd Konwersji", "Nieznany format wyjściowy.")
+            return
 
         if write_success:
-            print("\nProgram zakończył działanie pomyślnie.")
-            exit(0) 
+            self.log_message("\nKonwersja zakończona pomyślnie!")
+            QMessageBox.information(self, "Sukces", "Konwersja zakończona pomyślnie!")
         else:
-            print("\nProgram zakończył działanie z błędami podczas zapisu.")
-            exit(1) 
+            self.log_message("\nBłąd: Konwersja zakończyła się niepowodzeniem.")
+            QMessageBox.critical(self, "Błąd Konwersji", "Wystąpił błąd podczas konwersji. Sprawdź logi.")
 
-    except SystemExit as e:
-        if e.code == 0:
-            print("Program zakończył działanie (np. wyświetlono pomoc).")
-        else:
-            print(f"Program zakończył działanie z kodem błędu: {e.code}.")
-        exit(e.code) 
-    except Exception as e:
-        print(f"\nFATALNY BŁĄD: Wystąpił nieoczekiwany błąd globalny: {e}")
-        import traceback
-        traceback.print_exc() 
-        exit(1) 
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        try:
+            parsed_args = parse_arguments() 
+            print(f"Pomyślnie sparsowano argumenty:")
+            print(f"  Plik wejściowy: {parsed_args['input_path']} (Format: {parsed_args['input_format']})")
+            print(f"  Plik wyjściowy: {parsed_args['output_path']} (Format: {parsed_args['output_format']})")
+
+            print("\nRozpoczynanie wczytywania i walidacji pliku wejściowego...")
+            input_data = read_and_validate_data(
+                parsed_args['input_path'],
+                parsed_args['input_format']
+            )
+
+            if input_data is None:
+                print("Błąd: Nie udało się wczytać lub zweryfikować pliku wejściowego. Program zostanie zakończony.")
+                sys.exit(1)
+
+            data_for_conversion = None
+            if parsed_args['input_format'] == 'xml':
+                if isinstance(input_data, ET.Element):
+                    print("  Konwersja XML (ElementTree) na słownik/listę Pythona...")
+                    data_for_conversion = convert_xml_to_dict(input_data)
+                    if data_for_conversion is None:
+                        print("Błąd: Konwersja XML na słownik Pythona nie powiodła się.")
+                        sys.exit(1)
+                else:
+                    print(f"Błąd wewnętrzny: Oczekiwano obiektu ElementTree dla formatu XML, otrzymano {type(input_data)}.")
+                    sys.exit(1)
+            elif parsed_args['input_format'] in ['json', 'yaml']:
+                data_for_conversion = input_data
+                print(f"  Dane wejściowe są już w formie słownika/listy Pythona (z {parsed_args['input_format'].upper()}).")
+            else:
+                print(f"Błąd wewnętrzny: Nieznany format wejściowy do konwersji: {parsed_args['input_format']}.")
+                sys.exit(1)
+
+            write_success = False
+            if parsed_args['output_format'] == 'json':
+                print("\nRozpoczynanie zapisu danych do pliku JSON...")
+                write_success = write_data_to_json(data_for_conversion, parsed_args['output_path'])
+            elif parsed_args['output_format'] == 'xml':
+                print("\nRozpoczynanie zapisu danych do pliku XML...")
+                write_success = write_data_to_xml(data_for_conversion, parsed_args['output_path'])
+            elif parsed_args['output_format'] == 'yaml':
+                print("\nRozpoczynanie zapisu danych do pliku YAML...")
+                write_success = write_data_to_yaml(data_for_conversion, parsed_args['output_path'])
+            else:
+                print(f"Błąd wewnętrzny: Nieznany format wyjściowy do zapisu: {parsed_args['output_format']}.")
+                sys.exit(1)
+
+            if write_success:
+                print("\nProgram zakończył działanie pomyślnie.")
+                sys.exit(0)
+            else:
+                print("\nProgram zakończył działanie z błędami podczas zapisu.")
+                sys.exit(1)
+
+        except SystemExit as e:
+            if e.code == 0:
+                print("Program zakończył działanie (np. wyświetlono pomoc).")
+            else:
+                print(f"Program zakończył działanie z kodem błędu: {e.code}.")
+            sys.exit(e.code)
+        except Exception as e:
+            print(f"\nFATALNY BŁĄD: Wystąpił nieoczekiwany błąd globalny: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+    else: 
+        app = QApplication(sys.argv)
+        window = DataConverterApp()
+        window.show()
+        sys.exit(app.exec())
