@@ -1,16 +1,14 @@
 import argparse
 import os
 import json
-import xml.etree.ElementTree as ET 
-import yaml 
+import xml.etree.ElementTree as ET
+import yaml
 
 def parse_arguments():
-   
     parser = argparse.ArgumentParser(
         description="Konwertuje dane z jednego formatu na inny (XML, JSON, YAML)."
     )
 
-    
     parser.add_argument(
         "input_file",
         type=str,
@@ -56,6 +54,7 @@ def parse_arguments():
         "output_format": output_format
     }
 
+
 def read_and_validate_data(file_path, file_format):
     
     try:
@@ -85,6 +84,22 @@ def read_and_validate_data(file_path, file_format):
         print(f"Wystąpił nieoczekiwany błąd podczas wczytywania '{file_path}': {e}")
         return None
 
+def write_data_to_json(data, output_path):
+   
+    try:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            
+            json.dump(data, f, indent=4, ensure_ascii=False)
+        print(f"  Pomyślnie zapisano dane do pliku JSON: '{output_path}'.")
+        return True
+    except TypeError as e:
+        print(f"Błąd: Dane nie mogą być serializowane do JSON. Upewnij się, że to słownik/lista: {e}")
+        return False
+    except Exception as e:
+        print(f"Wystąpił błąd podczas zapisu do pliku JSON '{output_path}': {e}")
+        return False
+
+
 if __name__ == "__main__":
     try:
         parsed_args = parse_arguments()
@@ -100,10 +115,26 @@ if __name__ == "__main__":
 
         if input_data is not None:
             print("Walidacja pliku wejściowego zakończona sukcesem.")
+
+            if parsed_args['output_format'] == 'json':
+                print("\nRozpoczynanie zapisu danych do pliku JSON...")
+                
+                if isinstance(input_data, (dict, list)):
+                    write_success = write_data_to_json(input_data, parsed_args['output_path'])
+                    if write_success:
+                        print("Program zakończył działanie pomyślnie.")
+                    else:
+                        print("Program zakończył działanie z błędami podczas zapisu.")
+                        exit(1)
+                else:
+                    print(f"Ostrzeżenie: Wczytano dane w formacie {parsed_args['input_format']}, które nie są bezpośrednio konwertowalne do JSON w tym etapie (oczekiwano słownika/listy). Pomięto zapis do JSON w Tasku 3. Będzie to obsłużone w Taskach 4-6.")
+                    print("Program zakończył działanie.")
+
         else:
             print("Błąd walidacji pliku wejściowego. Program zostanie zakończony.")
             exit(1) 
-            
+
+
     except SystemExit as e:
         print(f"Błąd parsowania argumentów lub żądanie pomocy: {e}")
     except Exception as e:
