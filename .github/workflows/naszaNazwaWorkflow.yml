@@ -25,15 +25,13 @@ jobs:
     - name: Install dependencies 
       run: |
         pip install --upgrade pip
-        pip install pyinstaller # Upewnij się, że PyInstaller jest zainstalowany
-        # Pozostałe zależności, np. PyQt6, PyYAML
-        # Tutaj uruchomienie skryptu installResources.ps1
-        .\installResources.ps1
+        pip install pyinstaller 
+      
       shell: powershell 
 
     - name: Build executable with PyInstaller 
       run: |
-        pyinstaller --onefile --noconsole project.py # Używamy opcji --onefile i --noconsole dla GUI
+        pyinstaller --onefile --noconsole program.py
       
       shell: powershell 
 
