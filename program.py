@@ -2,6 +2,7 @@ import argparse
 import os
 import json
 import xml.etree.ElementTree as ET
+from xml.dom import minidom 
 import yaml
 
 def parse_arguments():
@@ -56,7 +57,6 @@ def parse_arguments():
 
 
 def read_and_validate_data(file_path, file_format):
-    
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             if file_format == 'json':
@@ -64,12 +64,12 @@ def read_and_validate_data(file_path, file_format):
                 print(f"  Pomyślnie wczytano i zweryfikowano JSON z '{file_path}'.")
                 return data
             elif file_format == 'xml':
-                tree = ET.parse(f) 
+                tree = ET.parse(f)
                 root = tree.getroot()
                 print(f"  Pomyślnie wczytano i zweryfikowano XML z '{file_path}'.")
-                return root 
+                return root
             elif file_format == 'yaml':
-                data = yaml.safe_load(f) 
+                data = yaml.safe_load(f)
                 print(f"  Pomyślnie wczytano i zweryfikowano YAML z '{file_path}'.")
                 return data
             else:
@@ -85,10 +85,8 @@ def read_and_validate_data(file_path, file_format):
         return None
 
 def write_data_to_json(data, output_path):
-   
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
-            
             json.dump(data, f, indent=4, ensure_ascii=False)
         print(f"  Pomyślnie zapisano dane do pliku JSON: '{output_path}'.")
         return True
@@ -97,6 +95,73 @@ def write_data_to_json(data, output_path):
         return False
     except Exception as e:
         print(f"Wystąpił błąd podczas zapisu do pliku JSON '{output_path}': {e}")
+        return False
+
+def convert_dict_to_xml_element(tag, d):
+   
+    elem = ET.Element(tag)
+    if isinstance(d, dict):
+        for key, val in d.items():
+            if isinstance(val, (dict, list)):
+                child_elem = convert_dict_to_xml_element(key, val)
+                elem.append(child_elem)
+            else:
+                child_elem = ET.SubElement(elem, key)
+                child_elem.text = str(val)
+    elif isinstance(d, list):
+        
+        for item in d:
+          
+            if isinstance(item, dict):
+                
+                child_elem = ET.SubElement(elem, tag[:-1] if tag.endswith('s') else tag) # heurystyka: usuń 's' z nazwy tagu listy
+                for k, v in item.items():
+                    if isinstance(v, (dict, list)):
+                        sub_child = convert_dict_to_xml_element(k, v)
+                        child_elem.append(sub_child)
+                    else:
+                        sub_child = ET.SubElement(child_elem, k)
+                        sub_child.text = str(v)
+            else:
+                child_elem = ET.SubElement(elem, tag[:-1] if tag.endswith('s') else tag)
+                child_elem.text = str(item)
+    else:
+        elem.text = str(d)
+    return elem
+
+def write_data_to_xml(data, output_path):
+    try:
+        if isinstance(data, ET.Element):
+        
+            root = data
+        elif isinstance(data, (dict, list)):
+            
+            if isinstance(data, dict):
+                root = convert_dict_to_xml_element("root", data)
+            elif isinstance(data, list):
+                root = ET.Element("root")
+                for item in data:
+                   
+                    item_elem = convert_dict_to_xml_element("item", item)
+                    root.append(item_elem)
+
+        else:
+            raise TypeError(f"Nieobsługiwany typ danych do zapisu do XML: {type(data)}")
+
+        rough_string = ET.tostring(root, 'utf-8')
+        reparsed = minidom.parseString(rough_string)
+        pretty_xml_as_string = reparsed.toprettyxml(indent="  ")
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+           
+            f.write(pretty_xml_as_string)
+        print(f"  Pomyślnie zapisano dane do pliku XML: '{output_path}'.")
+        return True
+    except TypeError as e:
+        print(f"Błąd: Dane nie mogą być skonwertowane lub serializowane do XML: {e}")
+        return False
+    except Exception as e:
+        print(f"Wystąpił błąd podczas zapisu do pliku XML '{output_path}': {e}")
         return False
 
 
@@ -116,23 +181,46 @@ if __name__ == "__main__":
         if input_data is not None:
             print("Walidacja pliku wejściowego zakończona sukcesem.")
 
+            data_to_write = input_data 
+
             if parsed_args['output_format'] == 'json':
                 print("\nRozpoczynanie zapisu danych do pliku JSON...")
+                if isinstance(data_to_write, ET.Element):
+                    print("  Konwersja XML (ElementTree) do JSON przed zapisem...")
+                    
+                    print("  Pomięto konwersję XML do JSON w tym etapie. Nie można zapisać.")
+                    exit(1) 
+                elif isinstance(data_to_write, (dict, list)):
+                    write_success = write_data_to_json(data_to_write, parsed_args['output_path'])
+                    if not write_success:
+                        print("Program zakończył działanie z błędami podczas zapisu.")
+                        exit(1)
+            elif parsed_args['output_format'] == 'xml':
+                print("\nRozpoczynanie zapisu danych do pliku XML...")
                 
-                if isinstance(input_data, (dict, list)):
-                    write_success = write_data_to_json(input_data, parsed_args['output_path'])
-                    if write_success:
-                        print("Program zakończył działanie pomyślnie.")
-                    else:
+                if isinstance(data_to_write, (dict, list)):
+                    print("  Konwersja słownika/listy do XML ElementTree przed zapisem...")
+                    write_success = write_data_to_xml(data_to_write, parsed_args['output_path'])
+                    if not write_success:
+                        print("Program zakończył działanie z błędami podczas zapisu.")
+                        exit(1)
+                elif isinstance(data_to_write, ET.Element):
+                    print("  Zapis obiektu ElementTree bezpośrednio do XML.")
+                    write_success = write_data_to_xml(data_to_write, parsed_args['output_path'])
+                    if not write_success:
                         print("Program zakończył działanie z błędami podczas zapisu.")
                         exit(1)
                 else:
-                    print(f"Ostrzeżenie: Wczytano dane w formacie {parsed_args['input_format']}, które nie są bezpośrednio konwertowalne do JSON w tym etapie (oczekiwano słownika/listy). Pomięto zapis do JSON w Tasku 3. Będzie to obsłużone w Taskach 4-6.")
-                    print("Program zakończył działanie.")
+                    print(f"Ostrzeżenie: Nieobsługiwany typ danych dla zapisu do XML: {type(data_to_write)}. Pomięto zapis.")
+                    exit(1) 
 
+            else:
+                print(f"Ostrzeżenie: Zapis do formatu '{parsed_args['output_format']}' nie jest jeszcze zaimplementowany.")
+
+            print("Program zakończył działanie pomyślnie.") 
         else:
             print("Błąd walidacji pliku wejściowego. Program zostanie zakończony.")
-            exit(1) 
+            exit(1)
 
 
     except SystemExit as e:
