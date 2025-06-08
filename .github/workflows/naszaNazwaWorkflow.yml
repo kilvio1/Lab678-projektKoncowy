@@ -39,4 +39,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: DataConverter-Windows-Executable
-        path: dist/project.exe 
+        path: dist/program.exe 
