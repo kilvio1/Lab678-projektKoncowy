@@ -1,5 +1,8 @@
 import argparse
 import os
+import json
+import xml.etree.ElementTree as ET 
+import yaml 
 
 def parse_arguments():
    
@@ -53,6 +56,35 @@ def parse_arguments():
         "output_format": output_format
     }
 
+def read_and_validate_data(file_path, file_format):
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            if file_format == 'json':
+                data = json.load(f)
+                print(f"  Pomyślnie wczytano i zweryfikowano JSON z '{file_path}'.")
+                return data
+            elif file_format == 'xml':
+                tree = ET.parse(f) 
+                root = tree.getroot()
+                print(f"  Pomyślnie wczytano i zweryfikowano XML z '{file_path}'.")
+                return root 
+            elif file_format == 'yaml':
+                data = yaml.safe_load(f) 
+                print(f"  Pomyślnie wczytano i zweryfikowano YAML z '{file_path}'.")
+                return data
+            else:
+                raise ValueError(f"Nieobsługiwany format dla wczytywania: {file_format}")
+    except FileNotFoundError:
+        print(f"Błąd: Plik '{file_path}' nie został znaleziony.")
+        return None
+    except (json.JSONDecodeError, ET.ParseError, yaml.YAMLError) as e:
+        print(f"Błąd składni w pliku '{file_path}' ({file_format.upper()}): {e}")
+        return None
+    except Exception as e:
+        print(f"Wystąpił nieoczekiwany błąd podczas wczytywania '{file_path}': {e}")
+        return None
+
 if __name__ == "__main__":
     try:
         parsed_args = parse_arguments()
@@ -60,6 +92,18 @@ if __name__ == "__main__":
         print(f"  Plik wejściowy: {parsed_args['input_path']} (Format: {parsed_args['input_format']})")
         print(f"  Plik wyjściowy: {parsed_args['output_path']} (Format: {parsed_args['output_format']})")
 
+        print("\nRozpoczynanie wczytywania i walidacji pliku wejściowego...")
+        input_data = read_and_validate_data(
+            parsed_args['input_path'],
+            parsed_args['input_format']
+        )
+
+        if input_data is not None:
+            print("Walidacja pliku wejściowego zakończona sukcesem.")
+        else:
+            print("Błąd walidacji pliku wejściowego. Program zostanie zakończony.")
+            exit(1) 
+            
     except SystemExit as e:
         print(f"Błąd parsowania argumentów lub żądanie pomocy: {e}")
     except Exception as e:

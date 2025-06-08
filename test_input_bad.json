@@ -1,0 +1,6 @@
+{
+  "name": "Produkt E",
+  "price": 49.99,
+  "available": true, 
+  tags: ["odziez"]
+}

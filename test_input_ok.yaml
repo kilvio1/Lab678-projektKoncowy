@@ -1,0 +1,9 @@
+product:
+  id: 123
+  name: Produkt D
+  details:
+    color: Czerwony
+    size: M
+prices:
+  - 10.0
+  - 20.0

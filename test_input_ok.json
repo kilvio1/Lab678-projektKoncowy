@@ -1,0 +1,6 @@
+{
+  "name": "Produkt A",
+  "price": 29.99,
+  "available": true,
+  "tags": ["elektronika", "nowosc"]
+}

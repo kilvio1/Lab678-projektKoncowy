@@ -1,0 +1,10 @@
+<root>
+  <item id="1">
+    <name>Produkt B</name>
+    <price>19.99</price>
+  </item>
+  <item id="2">
+    <name>Produkt C</name>
+    <price>99.99</price>
+  </item>
+</root>
