@@ -190,6 +190,20 @@ def convert_xml_to_dict(element):
 
     return result
 
+def write_data_to_yaml(data, output_path):
+   
+    try:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        print(f"  Pomyślnie zapisano dane do pliku YAML: '{output_path}'.")
+        return True
+    except TypeError as e:
+        print(f"Błąd: Dane nie mogą być serializowane do YAML. Upewnij się, że to słownik/lista: {e}")
+        return False
+    except Exception as e:
+        print(f"Wystąpił błąd podczas zapisu do pliku YAML '{output_path}': {e}")
+        return False
+
 
 if __name__ == "__main__":
     try:
@@ -238,14 +252,17 @@ if __name__ == "__main__":
                     print("Program zakończył działanie z błędami podczas zapisu.")
                     exit(1)
             elif parsed_args['output_format'] == 'yaml':
-                print("\nRozpoczynanie zapisu danych do pliku YAML (implementacja w Tasku 6)...")
-                print("  Zapis do YAML nie jest jeszcze zaimplementowany. Pomięto.")
-                exit(1) 
+                print("\nRozpoczynanie zapisu danych do pliku YAML...")
+                write_success = write_data_to_yaml(data_for_conversion, parsed_args['output_path'])
+                if not write_success:
+                    print("Program zakończył działanie z błędami podczas zapisu.")
+                    exit(1)
 
             print("Program zakończył działanie pomyślnie.")
         else:
             print("Błąd walidacji pliku wejściowego. Program zostanie zakończony.")
             exit(1)
+
 
 
     except SystemExit as e:
